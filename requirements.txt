@@ -6,5 +6,4 @@ cryptography==42.0.8
 python-engineio==4.9.1
 python-socketio==5.11.3
 gunicorn==22.0.0
-gevent==24.2.1
-gevent-websocket==0.10.1
+eventlet==0.36.1
