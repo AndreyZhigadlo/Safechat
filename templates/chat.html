@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SafeChat</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #0f0f1a;
+    color: #fff;
+    height: 100vh;
+    display: flex;
+    overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 300px;
+    background: #1a1a2e;
+    border-right: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+.sidebar-header {
+    padding: 20px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.sidebar-header h2 {
+    font-size: 20px;
+    background: linear-gradient(135deg, #6c63ff, #43aa8b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.logout-btn {
+    background: rgba(255,255,255,0.05);
+    border: none;
+    color: rgba(255,255,255,0.5);
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+.logout-btn:hover { background: rgba(230,57,70,0.2); color: #ff6b7a; }
+
+.search-box {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.search-box input {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    color: white;
+    font-size: 14px;
+    outline: none;
+}
+.search-box input::placeholder { color: rgba(255,255,255,0.3); }
+
+.section-title {
+    padding: 12px 16px 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: rgba(255,255,255,0.3);
+}
+.user-list { overflow-y: auto; flex: 1; }
+.user-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-radius: 10px;
+    margin: 2px 8px;
+    gap: 12px;
+}
+.user-item:hover { background: rgba(255,255,255,0.06); }
+.user-item.active { background: rgba(108,99,255,0.2); }
+.avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 16px;
+    flex-shrink: 0;
+    position: relative;
+}
+.avatar .online-dot {
+    position: absolute;
+    bottom: 1px;
+    right: 1px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #43aa8b;
+    border: 2px solid #1a1a2e;
+}
+.user-info { flex: 1; min-width: 0; }
+.user-name { font-size: 14px; font-weight: 600; }
+.user-status { font-size: 12px; color: rgba(255,255,255,0.4); }
+
+/* Chat area */
+.chat-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #0f0f1a;
+}
+.chat-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #1a1a2e;
+}
+.chat-header .avatar { width: 36px; height: 36px; font-size: 14px; }
+.chat-header-info h3 { font-size: 16px; }
+.chat-header-info span { font-size: 12px; color: rgba(255,255,255,0.4); }
+
+.empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255,255,255,0.2);
+    gap: 12px;
+}
+.empty-state .icon { font-size: 64px; }
+.empty-state p { font-size: 16px; }
+
+.messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.messages::-webkit-scrollbar { width: 4px; }
+.messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+.msg {
+    display: flex;
+    flex-direction: column;
+    max-width: 70%;
+    animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+.msg.own { align-self: flex-end; align-items: flex-end; }
+.msg.other { align-self: flex-start; align-items: flex-start; }
+
+.msg-sender {
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 3px;
+    padding: 0 4px;
+}
+.msg-bubble {
+    padding: 10px 14px;
+    border-radius: 16px;
+    font-size: 14px;
+    line-height: 1.5;
+    word-break: break-word;
+    position: relative;
+    cursor: pointer;
+}
+.msg.own .msg-bubble {
+    background: linear-gradient(135deg, #6c63ff, #5a52d5);
+    border-bottom-right-radius: 4px;
+}
+.msg.other .msg-bubble {
+    background: rgba(255,255,255,0.08);
+    border-bottom-left-radius: 4px;
+}
+.msg-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 3px;
+    padding: 0 4px;
+}
+.msg-time { font-size: 11px; color: rgba(255,255,255,0.3); }
+.msg-timer {
+    font-size: 10px;
+    color: #f8961e;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+.msg-deleted { color: rgba(255,255,255,0.3); font-style: italic; }
+
+/* Input area */
+.input-area {
+    padding: 16px 20px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    background: #1a1a2e;
+}
+.timer-select {
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.timer-select label { font-size: 12px; color: rgba(255,255,255,0.4); }
+.timer-select select {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    color: white;
+    padding: 4px 8px;
+    font-size: 12px;
+    outline: none;
+    cursor: pointer;
+}
+.input-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+}
+.input-row textarea {
+    flex: 1;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px;
+    color: white;
+    font-size: 14px;
+    resize: none;
+    outline: none;
+    max-height: 120px;
+    font-family: inherit;
+    line-height: 1.5;
+    transition: border-color 0.2s;
+}
+.input-row textarea:focus { border-color: #6c63ff; }
+.input-row textarea::placeholder { color: rgba(255,255,255,0.3); }
+.send-btn {
+    width: 44px;
+    height: 44px;
+    background: linear-gradient(135deg, #6c63ff, #5a52d5);
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.send-btn:hover { transform: scale(1.05); }
+
+/* Delete menu */
+.delete-menu {
+    position: fixed;
+    background: #2a2a3e;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 6px;
+    z-index: 1000;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    display: none;
+}
+.delete-menu button {
+    display: block;
+    width: 100%;
+    padding: 8px 16px;
+    background: none;
+    border: none;
+    color: #ff6b7a;
+    cursor: pointer;
+    font-size: 13px;
+    border-radius: 6px;
+    text-align: left;
+}
+.delete-menu button:hover { background: rgba(230,57,70,0.15); }
+
+@media (max-width: 600px) {
+    .sidebar { width: 260px; }
+    .msg { max-width: 85%; }
+}
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="sidebar-header">
+        <h2>🔐 SafeChat</h2>
+        <button class="logout-btn" onclick="logout()">Выйти</button>
+    </div>
+    <div class="search-box">
+        <input type="text" id="search" placeholder="🔍 Поиск пользователей..." oninput="filterUsers()">
+    </div>
+    <div class="section-title">Пользователи</div>
+    <div class="user-list" id="userList"></div>
+</div>
+
+<div class="chat-area" id="chatArea">
+    <div class="empty-state" id="emptyState">
+        <div class="icon">💬</div>
+        <p>Выбери пользователя для чата</p>
+    </div>
+    <div id="chatView" style="display:none; flex-direction:column;">
+        <div class="chat-header" id="chatHeader"></div>
+        <div class="messages" id="messages"></div>
+        <div class="input-area">
+            <div class="timer-select">
+                <label>⏱ Автоудаление:</label>
+                <select id="deleteTimer">
+                    <option value="">Не удалять</option>
+                    <option value="1">Через 1 мин</option>
+                    <option value="5">Через 5 мин</option>
+                    <option value="30">Через 30 мин</option>
+                    <option value="60">Через 1 час</option>
+                    <option value="1440">Через 24 часа</option>
+                </select>
+            </div>
+            <div class="input-row">
+                <textarea id="msgInput" placeholder="Сообщение..." rows="1"
+                    oninput="autoResize(this)"
+                    onkeydown="handleKey(event)"></textarea>
+                <button class="send-btn" onclick="sendMessage()">➤</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="delete-menu" id="deleteMenu">
+    <button onclick="deleteMessage()">🗑 Удалить сообщение</button>
+</div>
+
+<script>
+const socket = io();
+let currentRoom = null;
+let currentRoomName = null;
+let currentRoomColor = '#6c63ff';
+let selectedMsgId = null;
+let allUsers = [];
+let myId = null;
+
+// Инициализация
+async function init() {
+    const res = await fetch('/api/users');
+    allUsers = await res.json();
+    renderUsers(allUsers);
+
+    // Получить свой ID из первого сообщения или из другого способа
+    socket.emit('get_my_id');
+}
+
+function renderUsers(users) {
+    const list = document.getElementById('userList');
+    list.innerHTML = '';
+    users.forEach(u => {
+        const div = document.createElement('div');
+        div.className = 'user-item' + (currentRoom && currentRoom.includes(`_${u.id}_`) || currentRoom && currentRoom.endsWith(`_${u.id}`) ? ' active' : '');
+        div.innerHTML = `
+            <div class="avatar" style="background:${u.color}">
+                ${u.username[0].toUpperCase()}
+                ${u.online ? '<div class="online-dot"></div>' : ''}
+            </div>
+            <div class="user-info">
+                <div class="user-name">${u.username}</div>
+                <div class="user-status">${u.online ? '🟢 онлайн' : 'оффлайн'}</div>
+            </div>
+        `;
+        div.onclick = (e) => openChat(u, e.currentTarget);
+        list.appendChild(div);
+    });
+}
+
+function filterUsers() {
+    const q = document.getElementById('search').value.toLowerCase();
+    renderUsers(allUsers.filter(u => u.username.toLowerCase().includes(q)));
+}
+
+async function openChat(user, clickedEl) {
+    const res = await fetch('/api/start_chat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({user_id: user.id})
+    });
+    const data = await res.json();
+    if (data.error) return;
+
+    if (currentRoom) socket.emit('leave', {room: currentRoom});
+
+    currentRoom = data.room_id;
+    currentRoomName = user.username;
+    currentRoomColor = user.color;
+
+    socket.emit('join', {room: currentRoom});
+
+    document.getElementById('emptyState').style.display = 'none';
+    const chatView = document.getElementById('chatView');
+    chatView.style.display = 'flex';
+    chatView.style.flexDirection = 'column';
+    chatView.style.flex = '1';
+
+    document.getElementById('chatHeader').innerHTML = `
+        <div class="avatar" style="background:${user.color}">${user.username[0].toUpperCase()}</div>
+        <div class="chat-header-info">
+            <h3>${user.username}</h3>
+            <span>${user.online ? '🟢 онлайн' : 'оффлайн'}</span>
+        </div>
+    `;
+
+    document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
+    if (clickedEl) clickedEl.classList.add('active');
+
+    await loadMessages();
+    document.getElementById('msgInput').focus();
+}
+
+async function loadMessages() {
+    const res = await fetch(`/api/messages/${currentRoom}`);
+    const messages = await res.json();
+    const container = document.getElementById('messages');
+    container.innerHTML = '';
+    messages.forEach(m => addMessage(m));
+    scrollToBottom();
+}
+
+function addMessage(m) {
+    const container = document.getElementById('messages');
+    const isOwn = m.sender_id === myId;
+
+    const div = document.createElement('div');
+    div.className = `msg ${isOwn ? 'own' : 'other'}`;
+    div.dataset.id = m.id;
+
+    if (!isOwn) {
+        const senderDiv = document.createElement('div');
+        senderDiv.className = 'msg-sender';
+        senderDiv.textContent = m.sender;
+        div.appendChild(senderDiv);
+    }
+
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble';
+    bubble.textContent = m.text;
+    bubble.onclick = (e) => showDeleteMenu(e, m.id, m.sender_id);
+    div.appendChild(bubble);
+
+    const meta = document.createElement('div');
+    meta.className = 'msg-meta';
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'msg-time';
+    timeSpan.textContent = m.time;
+    meta.appendChild(timeSpan);
+    if (m.delete_at) {
+        const timerSpan = document.createElement('span');
+        timerSpan.className = 'msg-timer';
+        timerSpan.textContent = '⏱ авто';
+        meta.appendChild(timerSpan);
+    }
+    div.appendChild(meta);
+
+    container.appendChild(div);
+}
+
+function sendMessage() {
+    const input = document.getElementById('msgInput');
+    const text = input.value.trim();
+    const deleteAfter = document.getElementById('deleteTimer').value;
+    if (!text || !currentRoom) return;
+
+    socket.emit('message', {
+        room: currentRoom,
+        text: text,
+        delete_after: deleteAfter || null
+    });
+    input.value = '';
+    input.style.height = 'auto';
+}
+
+function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
+}
+
+function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function scrollToBottom() {
+    const c = document.getElementById('messages');
+    c.scrollTop = c.scrollHeight;
+}
+
+function showDeleteMenu(e, msgId, senderId) {
+    e.stopPropagation();
+    if (senderId !== myId) return;
+    selectedMsgId = msgId;
+    const menu = document.getElementById('deleteMenu');
+    menu.style.display = 'block';
+    menu.style.left = e.pageX + 'px';
+    menu.style.top = e.pageY + 'px';
+}
+
+function deleteMessage() {
+    if (!selectedMsgId) return;
+    socket.emit('delete_message', {message_id: selectedMsgId});
+    document.getElementById('deleteMenu').style.display = 'none';
+    selectedMsgId = null;
+}
+
+async function logout() {
+    await fetch('/api/logout', {method: 'POST'});
+    window.location.reload();
+}
+
+// Socket события
+socket.on('message', (m) => {
+    if (m.room === currentRoom || !m.room) {
+        addMessage(m);
+        scrollToBottom();
+    }
+});
+
+socket.on('message_deleted', (data) => {
+    const el = document.querySelector(`.msg[data-id="${data.id}"] .msg-bubble`);
+    if (el) el.classList.add('msg-deleted');
+    if (el) el.textContent = 'Сообщение удалено';
+});
+
+// Закрыть меню при клике вне
+document.addEventListener('click', () => {
+    document.getElementById('deleteMenu').style.display = 'none';
+});
+
+socket.on('my_id', (data) => { myId = data.id; });
+
+init();
+</script>
+</body>
+</html>

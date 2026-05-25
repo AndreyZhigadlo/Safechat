@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SafeChat — Войти</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+}
+.container {
+    background: rgba(255,255,255,0.05);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 24px;
+    padding: 48px 40px;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+}
+.logo {
+    text-align: center;
+    margin-bottom: 32px;
+}
+.logo .icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+}
+.logo h1 {
+    font-size: 28px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #6c63ff, #43aa8b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.logo p {
+    color: rgba(255,255,255,0.5);
+    font-size: 14px;
+    margin-top: 6px;
+}
+.tabs {
+    display: flex;
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 28px;
+}
+.tab {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s;
+    color: rgba(255,255,255,0.5);
+}
+.tab.active {
+    background: linear-gradient(135deg, #6c63ff, #5a52d5);
+    color: white;
+}
+.form { display: none; }
+.form.active { display: block; }
+.input-group {
+    margin-bottom: 16px;
+}
+.input-group label {
+    display: block;
+    font-size: 13px;
+    color: rgba(255,255,255,0.6);
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+.input-group input {
+    width: 100%;
+    padding: 14px 16px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    color: white;
+    font-size: 15px;
+    transition: all 0.3s;
+    outline: none;
+}
+.input-group input:focus {
+    border-color: #6c63ff;
+    background: rgba(108,99,255,0.1);
+}
+.btn {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, #6c63ff, #5a52d5);
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin-top: 8px;
+}
+.btn:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(108,99,255,0.4); }
+.btn:active { transform: translateY(0); }
+.error {
+    background: rgba(230,57,70,0.15);
+    border: 1px solid rgba(230,57,70,0.3);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 14px;
+    color: #ff6b7a;
+    margin-bottom: 16px;
+    display: none;
+}
+.privacy {
+    text-align: center;
+    margin-top: 24px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.3);
+    line-height: 1.6;
+}
+.privacy span { color: #6c63ff; }
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="logo">
+        <div class="icon">🔐</div>
+        <h1>SafeChat</h1>
+        <p>Приватный мессенджер с шифрованием</p>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('login')">Войти</div>
+        <div class="tab" onclick="switchTab('register')">Регистрация</div>
+    </div>
+
+    <div id="error" class="error"></div>
+
+    <div id="login" class="form active">
+        <div class="input-group">
+            <label>Имя пользователя</label>
+            <input type="text" id="login-username" placeholder="Введи имя" autocomplete="username">
+        </div>
+        <div class="input-group">
+            <label>Пароль</label>
+            <input type="password" id="login-password" placeholder="Введи пароль" autocomplete="current-password">
+        </div>
+        <button class="btn" onclick="doLogin()">Войти</button>
+    </div>
+
+    <div id="register" class="form">
+        <div class="input-group">
+            <label>Имя пользователя</label>
+            <input type="text" id="reg-username" placeholder="Придумай имя (мин. 3 символа)">
+        </div>
+        <div class="input-group">
+            <label>Пароль</label>
+            <input type="password" id="reg-password" placeholder="Придумай пароль (мин. 6 символов)">
+        </div>
+        <button class="btn" onclick="doRegister()">Создать аккаунт</button>
+    </div>
+
+    <div class="privacy">
+        🛡️ Без номера телефона и email<br>
+        <span>Все сообщения зашифрованы</span> · Никаких логов
+    </div>
+</div>
+
+<script>
+function switchTab(tab) {
+    document.querySelectorAll('.tab').forEach((t, i) => {
+        t.classList.toggle('active', (i === 0) === (tab === 'login'));
+    });
+    document.getElementById('login').classList.toggle('active', tab === 'login');
+    document.getElementById('register').classList.toggle('active', tab === 'register');
+    hideError();
+}
+
+function showError(msg) {
+    const el = document.getElementById('error');
+    el.textContent = msg;
+    el.style.display = 'block';
+}
+
+function hideError() {
+    document.getElementById('error').style.display = 'none';
+}
+
+async function doLogin() {
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    if (!username || !password) return showError('Заполни все поля');
+    const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    if (data.success) window.location.reload();
+    else showError(data.error);
+}
+
+async function doRegister() {
+    const username = document.getElementById('reg-username').value.trim();
+    const password = document.getElementById('reg-password').value;
+    const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    if (data.success) window.location.reload();
+    else showError(data.error);
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+        const active = document.querySelector('.form.active').id;
+        active === 'login' ? doLogin() : doRegister();
+    }
+});
+</script>
+</body>
+</html>
