@@ -7,16 +7,23 @@ from datetime import datetime, timedelta
 import os, json, threading, time
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24).hex())
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///messenger.db')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-change-me')
+
+db_url = os.environ.get('DATABASE_URL', 'sqlite:///messenger.db')
+if db_url.startswith('postgres://'):
+    db_url = db_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
-# Ключ шифрования
-ENCRYPT_KEY = os.environ.get('ENCRYPT_KEY', Fernet.generate_key().decode())
-fernet = Fernet(ENCRYPT_KEY.encode() if isinstance(ENCRYPT_KEY, str) else ENCRYPT_KEY)
+# Ключ шифрования — должен быть задан через переменную окружения ENCRYPT_KEY
+_raw_key = os.environ.get('ENCRYPT_KEY')
+if not _raw_key:
+    _raw_key = Fernet.generate_key().decode()
+    print(f"WARNING: ENCRYPT_KEY not set. Generated temporary key. Set ENCRYPT_KEY env var to persist messages.")
+fernet = Fernet(_raw_key.encode() if isinstance(_raw_key, str) else _raw_key)
 
 # --- Модели базы данных ---
 
