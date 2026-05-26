@@ -268,6 +268,70 @@ body {
 }
 .send-btn:hover { transform: scale(1.05); }
 
+/* Emoticon panel */
+.emoji-btn {
+    width: 44px;
+    height: 44px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.emoji-btn:hover { background: rgba(108,99,255,0.3); }
+.emoji-panel {
+    display: none;
+    position: absolute;
+    bottom: 100px;
+    left: 20px;
+    right: 20px;
+    background: #1e1e35;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px;
+    padding: 12px;
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.5);
+    z-index: 100;
+}
+.emoji-panel.open { display: block; }
+.emoji-panel-title {
+    font-size: 11px;
+    color: rgba(255,255,255,0.3);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+}
+.emoji-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+    gap: 4px;
+}
+.emoji-item {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 0.15s;
+    font-size: 22px;
+    position: relative;
+}
+.emoji-item:hover { background: rgba(108,99,255,0.3); }
+.emoji-code {
+    font-size: 8px;
+    color: rgba(255,255,255,0.3);
+    font-family: monospace;
+    margin-top: 1px;
+}
+
 /* Delete menu */
 .delete-menu {
     position: fixed;
@@ -321,7 +385,11 @@ body {
     <div id="chatView" style="display:none; flex-direction:column;">
         <div class="chat-header" id="chatHeader"></div>
         <div class="messages" id="messages"></div>
-        <div class="input-area">
+        <div class="input-area" style="position:relative;">
+            <div id="emojiPanel" class="emoji-panel">
+                <div class="emoji-panel-title">Смайлики из аськи 🕹️</div>
+                <div class="emoji-grid" id="emojiGrid"></div>
+            </div>
             <div class="timer-select">
                 <label>⏱ Автоудаление:</label>
                 <select id="deleteTimer">
@@ -337,6 +405,7 @@ body {
                 <textarea id="msgInput" placeholder="Сообщение..." rows="1"
                     oninput="autoResize(this)"
                     onkeydown="handleKey(event)"></textarea>
+                <button class="emoji-btn" onclick="toggleEmojiPanel(event)" title="Смайлики">🙂</button>
                 <button class="send-btn" onclick="sendMessage()">➤</button>
             </div>
         </div>
@@ -348,6 +417,62 @@ body {
 </div>
 
 <script>
+// Смайлики из аськи
+const EMOTICONS = [
+    { code: ':)', emoji: '😊' }, { code: ':D', emoji: '😃' },
+    { code: ':(', emoji: '😢' }, { code: ';)', emoji: '😉' },
+    { code: ':P', emoji: '😛' }, { code: ':O', emoji: '😮' },
+    { code: ':*', emoji: '😘' }, { code: '>:(', emoji: '😠' },
+    { code: ':\'(', emoji: '😭' }, { code: ':|', emoji: '😐' },
+    { code: ':$', emoji: '😳' }, { code: 'B)', emoji: '😎' },
+    { code: 'O:)', emoji: '😇' }, { code: ']:)', emoji: '😈' },
+    { code: ':))', emoji: '😂' }, { code: '(Y)', emoji: '👍' },
+    { code: '(N)', emoji: '👎' }, { code: '(L)', emoji: '❤️' },
+    { code: '(U)', emoji: '💔' }, { code: '(K)', emoji: '💋' },
+    { code: '(H)', emoji: '🤗' }, { code: '(F)', emoji: '🌹' },
+    { code: '(G)', emoji: '🎁' }, { code: '(B)', emoji: '🍺' },
+    { code: '(C)', emoji: '☕' }, { code: '(S)', emoji: '⭐' },
+    { code: '(T)', emoji: '📞' }, { code: '(@)', emoji: '🐱' },
+    { code: '(&)', emoji: '🐶' }, { code: '(I)', emoji: '💡' },
+    { code: '(E)', emoji: '✉️' }, { code: '(M)', emoji: '🎵' },
+    { code: '(Z)', emoji: '💤' }, { code: '(W)', emoji: '🌸' },
+];
+
+function buildEmojiPanel() {
+    const grid = document.getElementById('emojiGrid');
+    EMOTICONS.forEach(e => {
+        const item = document.createElement('div');
+        item.className = 'emoji-item';
+        item.title = e.code;
+        item.innerHTML = `${e.emoji}<span class="emoji-code">${e.code}</span>`;
+        item.onclick = (ev) => { ev.stopPropagation(); insertEmoji(e.emoji); };
+        grid.appendChild(item);
+    });
+}
+
+function toggleEmojiPanel(e) {
+    e.stopPropagation();
+    document.getElementById('emojiPanel').classList.toggle('open');
+}
+
+function insertEmoji(emoji) {
+    const input = document.getElementById('msgInput');
+    const pos = input.selectionStart;
+    input.value = input.value.slice(0, pos) + emoji + input.value.slice(pos);
+    input.selectionStart = input.selectionEnd = pos + emoji.length;
+    input.focus();
+    autoResize(input);
+}
+
+// Авто-конвертация текстовых кодов при наборе (напр. :) → 😊)
+function convertEmoticons(text) {
+    const sorted = [...EMOTICONS].sort((a, b) => b.code.length - a.code.length);
+    sorted.forEach(e => {
+        text = text.split(e.code).join(e.emoji);
+    });
+    return text;
+}
+
 const socket = io();
 let currentRoom = null;
 let currentRoomName = null;
@@ -479,7 +604,7 @@ function addMessage(m) {
 
 function sendMessage() {
     const input = document.getElementById('msgInput');
-    const text = input.value.trim();
+    const text = convertEmoticons(input.value.trim());
     const deleteAfter = document.getElementById('deleteTimer').value;
     if (!text || !currentRoom) return;
 
@@ -490,6 +615,7 @@ function sendMessage() {
     });
     input.value = '';
     input.style.height = 'auto';
+    document.getElementById('emojiPanel').classList.remove('open');
 }
 
 function handleKey(e) {
@@ -545,13 +671,15 @@ socket.on('message_deleted', (data) => {
     if (el) el.textContent = 'Сообщение удалено';
 });
 
-// Закрыть меню при клике вне
+// Закрыть меню и панель смайликов при клике вне
 document.addEventListener('click', () => {
     document.getElementById('deleteMenu').style.display = 'none';
+    document.getElementById('emojiPanel').classList.remove('open');
 });
 
 socket.on('my_id', (data) => { myId = data.id; });
 
+buildEmojiPanel();
 init();
 </script>
 </body>
