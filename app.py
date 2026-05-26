@@ -7,10 +7,11 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from cryptography.fernet import Fernet
 from datetime import datetime, timedelta
-import os, json, threading, time
+import os, json, threading, time, base64
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-change-me')
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB макс
 
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///messenger.db')
 if db_url.startswith('postgres://'):
@@ -44,8 +45,11 @@ class Message(db.Model):
     sender_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     content = db.Column(db.Text, nullable=False)  # зашифровано
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    delete_at = db.Column(db.DateTime, nullable=True)  # автоудаление
+    delete_at = db.Column(db.DateTime, nullable=True)
     is_deleted = db.Column(db.Boolean, default=False)
+    file_data = db.Column(db.Text, nullable=True)   # base64
+    file_name = db.Column(db.String(255), nullable=True)
+    file_type = db.Column(db.String(100), nullable=True)
 
 class Room(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -205,7 +209,10 @@ def get_messages(room_id):
         user = User.query.get(m.sender_id)
         result.append({
             'id': m.id,
-            'text': decrypt(m.content),
+            'text': decrypt(m.content) if not m.file_data else '',
+            'file_data': m.file_data,
+            'file_name': m.file_name,
+            'file_type': m.file_type,
             'sender': user.username if user else 'Unknown',
             'sender_id': m.sender_id,
             'color': user.avatar_color if user else '#999',
@@ -213,6 +220,59 @@ def get_messages(room_id):
             'delete_at': m.delete_at.isoformat() if m.delete_at else None
         })
     return jsonify(result)
+
+@app.route('/api/messages/file', methods=['POST'])
+def send_file_msg():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Не авторизован'}), 401
+    if 'file' not in request.files:
+        return jsonify({'error': 'Файл не найден'}), 400
+
+    file = request.files['file']
+    room_id = request.form.get('room_id')
+    delete_after = request.form.get('delete_after')
+    if not room_id:
+        return jsonify({'error': 'Комната не указана'}), 400
+
+    file_bytes = file.read()
+    if len(file_bytes) > 5 * 1024 * 1024:
+        return jsonify({'error': 'Файл слишком большой (макс. 5MB)'}), 400
+
+    file_b64 = base64.b64encode(file_bytes).decode('utf-8')
+    file_name = file.filename
+    file_type = file.content_type or 'application/octet-stream'
+
+    delete_at = None
+    if delete_after:
+        delete_at = datetime.utcnow() + timedelta(minutes=int(delete_after))
+
+    msg = Message(
+        room=room_id,
+        sender_id=session['user_id'],
+        content=encrypt(file_name),
+        file_data=file_b64,
+        file_name=file_name,
+        file_type=file_type,
+        delete_at=delete_at
+    )
+    db.session.add(msg)
+    db.session.commit()
+
+    user = User.query.get(session['user_id'])
+    msg_data = {
+        'id': msg.id,
+        'text': '',
+        'file_data': file_b64,
+        'file_name': file_name,
+        'file_type': file_type,
+        'sender': user.username,
+        'sender_id': user.id,
+        'color': user.avatar_color,
+        'time': msg.created_at.strftime('%H:%M'),
+        'delete_at': delete_at.isoformat() if delete_at else None
+    }
+    socketio.emit('message', msg_data, room=room_id)
+    return jsonify({'success': True})
 
 # --- WebSocket события ---
 
@@ -293,8 +353,23 @@ def on_delete(data):
         db.session.commit()
         emit('message_deleted', {'id': msg.id}, room=msg.room)
 
+from sqlalchemy import text, inspect as sa_inspect
+
 with app.app_context():
     db.create_all()
+    try:
+        inspector = sa_inspect(db.engine)
+        cols = [c['name'] for c in inspector.get_columns('message')]
+        with db.engine.connect() as conn:
+            if 'file_data' not in cols:
+                conn.execute(text('ALTER TABLE message ADD COLUMN file_data TEXT'))
+            if 'file_name' not in cols:
+                conn.execute(text('ALTER TABLE message ADD COLUMN file_name VARCHAR(255)'))
+            if 'file_type' not in cols:
+                conn.execute(text('ALTER TABLE message ADD COLUMN file_type VARCHAR(100)'))
+            conn.commit()
+    except Exception as e:
+        print(f"Migration: {e}")
 
 threading.Thread(target=auto_delete_messages, daemon=True).start()
 

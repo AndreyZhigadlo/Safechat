@@ -268,6 +268,57 @@ body {
 }
 .send-btn:hover { transform: scale(1.05); }
 
+/* File attach button */
+.attach-btn {
+    width: 44px; height: 44px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    color: rgba(255,255,255,0.6);
+    font-size: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.attach-btn:hover { background: rgba(108,99,255,0.3); color: white; }
+
+/* File preview bar */
+.file-preview {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    background: rgba(108,99,255,0.15);
+    border: 1px solid rgba(108,99,255,0.3);
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+.file-preview.show { display: flex; }
+.file-preview img { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
+.file-preview-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-preview-remove { cursor: pointer; color: #ff6b7a; font-size: 18px; line-height: 1; }
+
+/* File message bubble */
+.msg-file-img { max-width: 240px; max-height: 200px; border-radius: 10px; cursor: pointer; display: block; margin-bottom: 4px; }
+.msg-file-card {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 10px; padding: 10px 12px;
+    text-decoration: none; color: white;
+}
+.msg-file-card:hover { background: rgba(255,255,255,0.12); }
+.msg-file-icon { font-size: 28px; }
+.msg-file-info { overflow: hidden; }
+.msg-file-info span { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
+.msg-file-info small { color: rgba(255,255,255,0.4); font-size: 11px; }
+
+/* Lightbox */
+.lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:9999; align-items:center; justify-content:center; cursor:zoom-out; }
+.lightbox.open { display:flex; }
+.lightbox img { max-width:90vw; max-height:90vh; border-radius:12px; }
+
 /* Emoticon panel */
 .emoji-btn {
     width: 44px;
@@ -401,7 +452,14 @@ body {
                     <option value="1440">Через 24 часа</option>
                 </select>
             </div>
+            <div id="filePreview" class="file-preview">
+                <span id="filePreviewThumb"></span>
+                <span class="file-preview-name" id="filePreviewName"></span>
+                <span class="file-preview-remove" onclick="clearFile()">✕</span>
+            </div>
             <div class="input-row">
+                <input type="file" id="fileInput" style="display:none" onchange="onFileSelected(this)">
+                <button class="attach-btn" onclick="document.getElementById('fileInput').click()" title="Прикрепить файл">📎</button>
                 <textarea id="msgInput" placeholder="Сообщение..." rows="1"
                     oninput="autoResize(this)"
                     onkeydown="handleKey(event)"></textarea>
@@ -414,6 +472,10 @@ body {
 
 <div class="delete-menu" id="deleteMenu">
     <button onclick="deleteMessage()">🗑 Удалить сообщение</button>
+</div>
+
+<div class="lightbox" id="lightbox" onclick="this.classList.remove('open')">
+    <img id="lightboxImg" src="">
 </div>
 
 <script>
@@ -581,7 +643,27 @@ function addMessage(m) {
 
     const bubble = document.createElement('div');
     bubble.className = 'msg-bubble';
-    bubble.textContent = m.text;
+    if (m.file_data) {
+        if (m.file_type && m.file_type.startsWith('image/')) {
+            const img = document.createElement('img');
+            img.className = 'msg-file-img';
+            img.src = `data:${m.file_type};base64,${m.file_data}`;
+            img.onclick = (e) => { e.stopPropagation(); openLightbox(img.src); };
+            bubble.appendChild(img);
+        } else {
+            const ext = (m.file_name || '').split('.').pop().toUpperCase();
+            const a = document.createElement('a');
+            a.className = 'msg-file-card';
+            a.href = `data:${m.file_type};base64,${m.file_data}`;
+            a.download = m.file_name || 'file';
+            a.onclick = e => e.stopPropagation();
+            a.innerHTML = `<span class="msg-file-icon">${getFileIcon(m.file_type)}</span>
+                <span class="msg-file-info"><span>${m.file_name || 'file'}</span><small>${ext}</small></span>`;
+            bubble.appendChild(a);
+        }
+    } else {
+        bubble.textContent = m.text;
+    }
     bubble.onclick = (e) => showDeleteMenu(e, m.id, m.sender_id);
     div.appendChild(bubble);
 
@@ -602,19 +684,71 @@ function addMessage(m) {
     container.appendChild(div);
 }
 
-function sendMessage() {
+let pendingFile = null;
+
+function onFileSelected(input) {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+        alert('Файл слишком большой. Максимум 5MB.');
+        input.value = '';
+        return;
+    }
+    pendingFile = file;
+    const preview = document.getElementById('filePreview');
+    const thumb = document.getElementById('filePreviewThumb');
+    document.getElementById('filePreviewName').textContent = file.name;
+    if (file.type.startsWith('image/')) {
+        const url = URL.createObjectURL(file);
+        thumb.innerHTML = `<img src="${url}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">`;
+    } else {
+        thumb.innerHTML = getFileIcon(file.type);
+    }
+    preview.classList.add('show');
+}
+
+function clearFile() {
+    pendingFile = null;
+    document.getElementById('fileInput').value = '';
+    document.getElementById('filePreview').classList.remove('show');
+}
+
+function getFileIcon(type) {
+    if (type.startsWith('video/')) return '🎥';
+    if (type.startsWith('audio/')) return '🎵';
+    if (type.includes('pdf')) return '📄';
+    if (type.includes('zip') || type.includes('rar')) return '🗜️';
+    if (type.includes('word') || type.includes('doc')) return '📝';
+    return '📎';
+}
+
+async function sendMessage() {
+    const deleteAfter = document.getElementById('deleteTimer').value;
+
+    if (pendingFile) {
+        const formData = new FormData();
+        formData.append('file', pendingFile);
+        formData.append('room_id', currentRoom);
+        if (deleteAfter) formData.append('delete_after', deleteAfter);
+        const sendBtn = document.querySelector('.send-btn');
+        sendBtn.textContent = '⏳';
+        sendBtn.disabled = true;
+        try {
+            await fetch('/api/messages/file', { method: 'POST', body: formData });
+        } finally {
+            sendBtn.textContent = '➤';
+            sendBtn.disabled = false;
+            clearFile();
+        }
+    }
+
     const input = document.getElementById('msgInput');
     const text = convertEmoticons(input.value.trim());
-    const deleteAfter = document.getElementById('deleteTimer').value;
-    if (!text || !currentRoom) return;
-
-    socket.emit('message', {
-        room: currentRoom,
-        text: text,
-        delete_after: deleteAfter || null
-    });
-    input.value = '';
-    input.style.height = 'auto';
+    if (text && currentRoom) {
+        socket.emit('message', { room: currentRoom, text, delete_after: deleteAfter || null });
+        input.value = '';
+        input.style.height = 'auto';
+    }
     document.getElementById('emojiPanel').classList.remove('open');
 }
 
@@ -678,6 +812,11 @@ document.addEventListener('click', () => {
 });
 
 socket.on('my_id', (data) => { myId = data.id; });
+
+function openLightbox(src) {
+    document.getElementById('lightboxImg').src = src;
+    document.getElementById('lightbox').classList.add('open');
+}
 
 buildEmojiPanel();
 init();
